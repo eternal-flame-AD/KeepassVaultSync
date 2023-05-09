@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -81,12 +82,17 @@ namespace KeepassVaultSync
             var countUploaded = 0;
             var countDeleted = 0;
             var countFailed = 0;
-            
-            var vaultPathsToDelete = 
-                syncConfig.DeleteOrphans ?
-                await VaultUtil.GetVaultKv1Paths(vaultClient, syncConfig.VaultMount, cancellationToken) :
-                    new List<string>();
-            
+
+            var vaultPathsToDelete =
+                syncConfig.DeleteOrphans
+                    ? await VaultUtil.GetVaultKv1Paths(vaultClient, syncConfig.VaultMount, cancellationToken)
+                    : new List<string>();
+            vaultPathsToDelete = 
+                (from path in vaultPathsToDelete
+                let pathSplit = path.Split('/')
+                let pathSplitEscaped = pathSplit.Select(VaultUtil.EscapeVaultPath)
+                select string.Join("/", pathSplitEscaped)).ToList();
+
             if (syncConfig.DeleteOrphans)
                 _syncStatusForm.LogInfo($"Discovered {vaultPathsToDelete.Count} existing entries in vault");
 
