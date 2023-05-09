@@ -25,6 +25,7 @@ Then follow these steps:
    to include in the Tags field.
 5. If you want to blacklist or whitelist certain paths, put each of the blacklist
    or whitelist regex in "path_regex_blacklist" or "path_regex_whitelist" string field.
+   Seperate entries with a new line.
    Vault sync config themselves are always excluded from syncing.
 6. If you want to delete orphan entries already in vault, add a "delete_orphans" string
    field with a non-empty value.
