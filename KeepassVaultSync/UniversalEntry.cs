@@ -67,27 +67,16 @@ namespace KeepassVaultSync
             }
         }
 
-        public static string EscapeVaultPath(string path)
-        {
-            return
-                Uri.EscapeUriString(
-                    path
-                        .Replace("/", "_")
-                        .Replace(" ", "_")
-                        .Replace("#", "_")
-                );
-        }
-
         public string VaultFullPath()
         {
             var ret = "";
             foreach (var path in Paths)
             {
-                var pathEsc = EscapeVaultPath(path);
+                var pathEsc = VaultUtil.EscapeVaultPath(path);
                 ret += pathEsc + "/";
             }
 
-            ret += EscapeVaultPath(Name);
+            ret += VaultUtil.EscapeVaultPath(Name);
 
             return ret;
         }

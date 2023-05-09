@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +9,12 @@ namespace KeepassVaultSync
 {
     public static class VaultUtil
     {
+        public static string EscapeVaultPath(string path)
+        {
+            return
+                Uri.EscapeDataString(path);
+        }
+        
         public static async Task<IList<string>> GetVaultKv1Paths(
             VaultClient vaultClient,
             string mountPoint = null,
