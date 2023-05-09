@@ -190,7 +190,10 @@ namespace KeepassVaultSync
                         } catch (Exception e)
                         {
                             retries += 1;
-                            _syncStatusForm.LogError($"[retry {retries} of 3] Error writing entry {syncConfig.VaultMount}/{univEntry.VaultFullPath()}: {e}");
+                            _syncStatusForm.LogError(e is OperationCanceledException
+                                ? $"[retry {retries} of 3] Error writing entry {syncConfig.VaultMount}/{univEntry.VaultFullPath()}: timeout"
+                                : $"[retry {retries} of 3] Error writing entry {syncConfig.VaultMount}/{univEntry.VaultFullPath()}: {e}");
+                            // ReSharper disable once InvertIf
                             if (retries >= 3)
                             {
                                 _syncStatusForm.LogError($"Giving up on entry {syncConfig.VaultMount}/{univEntry.VaultFullPath()}");
@@ -253,12 +256,9 @@ namespace KeepassVaultSync
 
         private void UpdateAvailableSyncs()
         {
-            IList<SyncException> exceptions = new List<SyncException>();
-            IList<SyncConfig> syncConfigs = new List<SyncConfig>();
-
             try
             {
-                syncConfigs = SyncConfig.GetSyncConfigs(_host.Database, out exceptions);
+                var syncConfigs = SyncConfig.GetSyncConfigs(_host.Database, out var exceptions);
                 if (syncConfigs == null)
                 {
                     _syncStatusForm.LogError("Fatal error obtaining sync configs, abort.");
@@ -302,13 +302,17 @@ namespace KeepassVaultSync
                 {
                     await PerformSync(syncConfig, _cancellationTokenSource.Token);
                 }
-                catch (OperationCanceledException)
-                {
-                    _syncStatusForm.LogWarning($"Sync cancelled for {syncConfig.VaultMount}@{syncConfig.VaultAddr}");
-                    break;
-                }
                 catch (Exception exception)
                 {
+                    if (exception is OperationCanceledException)
+                    {
+                        if (_cancellationTokenSource.IsCancellationRequested)
+                            _syncStatusForm.LogWarning($"Sync cancelled for {syncConfig.VaultMount}@{syncConfig.VaultAddr}");
+                        else
+                            _syncStatusForm.LogError($"Fatal error syncing {syncConfig.VaultMount}@{syncConfig.VaultAddr}: timeout");
+                        
+                        break;
+                    }
                     _syncStatusForm.LogError($"Fatal error syncing {syncConfig.VaultMount}@{syncConfig.VaultAddr}: {exception}");
                     break;
                 }
