@@ -25,7 +25,29 @@ namespace KeepassVaultSync
             _syncStatusForm = new SyncStatusForm();
             _syncStatusForm.StartClicked += OnStartSync;
             _syncStatusForm.StopClicked += OnStopSync;
+            _syncStatusForm.RefreshSyncs += (o, e) => UpdateAvailableSyncs();
+            
+            // prevent file from closing while sync is running
+            _host.MainWindow.FileClosingPre += (sender, args) =>
+            {
+                if (_cancellationTokenSource != null)
+                {
+                    if (_syncStatusForm.UserConfig.InhibitLockDuringSync)
+                    {
+                        args.Cancel = true;
+                        _syncStatusForm.LogInfo("Inhibiting file close while sync is running");
+                    }
+                    else
+                    {
+                        OnStopSync(sender, args);
+                    }
 
+                    return;
+                }
+                
+                _syncStatusForm.Hide();
+            };
+            
             return true;
         }
 
@@ -219,38 +241,51 @@ namespace KeepassVaultSync
         {
             _syncStatusForm.Show();
 
-           _syncStatusForm.LogInfo("Plugin window opened");
+            UpdateAvailableSyncs();
+            _syncStatusForm.LogInfo($"Plugin window opened, read config={_syncStatusForm.UserConfig}");
+        }
+
+        private void UpdateAvailableSyncs()
+        {
+            IList<SyncException> exceptions = new List<SyncException>();
+            IList<SyncConfig> syncConfigs = new List<SyncConfig>();
+
+            try
+            {
+                syncConfigs = SyncConfig.GetSyncConfigs(_host.Database, out exceptions);
+                if (syncConfigs == null)
+                {
+                    _syncStatusForm.LogError("Fatal error obtaining sync configs, abort.");
+                    return;
+                }
+                foreach (var exception in exceptions)
+                {
+                    _syncStatusForm.LogError($"Error obtaining sync configs: {exception}");
+                }
+                _syncStatusForm.UpdateAvailableSyncs(syncConfigs);
+            } catch (Exception ex)
+            {
+                _syncStatusForm.LogError($"Fatal error obtaining sync configs: {ex}");
+            }
         }
 
         private async void OnStartSync(object sender, EventArgs e)
         {
             _cancellationTokenSource = new CancellationTokenSource();
 
-            IList<SyncException> exceptions = new List<SyncException>();
-            IList<SyncConfig> syncConfigs = new List<SyncConfig>();
-            try
-            {
-                syncConfigs = SyncConfig.GetSyncConfigs(_host.Database, out exceptions);
-            } catch (Exception ex)
-            {
-                _syncStatusForm.LogError($"Fatal error obtaining sync configs: {ex}");
-            }
-            foreach (var exception in exceptions)
-            {
-                _syncStatusForm.LogError($"Error obtaining sync configs: {exception}");
-            }
+            var syncConfigs = _syncStatusForm.GetSelectedSyncs();
             if (syncConfigs == null)
             {
                 _syncStatusForm.LogError("Fatal error obtaining sync configs, abort.");
                 _cancellationTokenSource.Dispose();
-                _cancellationTokenSource = null;
                 _syncStatusForm.FinishSyncStatus();
+                _cancellationTokenSource = null;
                 return;
             }
             
             if  (syncConfigs.Count == 0)
             {
-                _syncStatusForm.LogWarning("No sync configs found");
+                _syncStatusForm.LogError("No sync configs selected, abort.");
             }
             foreach (var syncConfig in syncConfigs)
             {
@@ -274,8 +309,8 @@ namespace KeepassVaultSync
             }
             
             _cancellationTokenSource.Dispose();
-            _cancellationTokenSource = null;
             _syncStatusForm.FinishSyncStatus();
+            _cancellationTokenSource = null;
         }
         
         private void OnStopSync(object sender, EventArgs e)

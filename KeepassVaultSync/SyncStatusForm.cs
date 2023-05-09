@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
+using KeePassLib;
 
 namespace KeepassVaultSync
 {
@@ -8,8 +11,31 @@ namespace KeepassVaultSync
     {
         public event EventHandler StartClicked;
         public event EventHandler StopClicked;
+        public event EventHandler RefreshSyncs;
         
         private bool _started = false;
+
+        public UserConfig _userConfig;
+        public UserConfig UserConfig
+        {
+            get
+            {
+                if (_userConfig == null)
+                {
+                    _userConfig = new UserConfig();
+                    _userConfig.SetOptionItems(optionsListBox);
+                }
+
+                _userConfig.SetSelfOptionsItemsFromSelectedIndices(optionsListBox.CheckedIndices);
+                
+                return _userConfig;
+            }
+            set
+            {
+                _userConfig = value;
+                _userConfig.SetOptionItems(optionsListBox);
+            }
+        }
 
         public SyncStatusForm()
         {
@@ -31,8 +57,11 @@ namespace KeepassVaultSync
                     StopClicked?.Invoke(sender, args);
                 }
             };
+            refreshSyncsButton.Click += (sender, args) => { RefreshSyncs?.Invoke(sender, args); };
             clearLogButton.Click += (sender, args) => { syncStatusLogTB.Clear(); };
         }
+        
+        // <> status updates
 
         public void LogStatusItem(string severity, string log)
         {
@@ -106,5 +135,34 @@ namespace KeepassVaultSync
             LogStatusItem("ERROR", Color.Red, log);
             ScrollLogToEnd();
         }
+        
+        // </> status updates
+        
+        // <> configs
+        public void UpdateAvailableSyncs(IList<SyncConfig> syncConfigs)
+        {
+            var originallySelected = new Dictionary<PwUuid, bool>();
+            // ReSharper disable once ForCanBeConvertedToForeach
+            for (var i = 0; i < syncItemSelector.Items.Count; i++)
+            {
+                var item = syncItemSelector.Items[i];
+                if (item is SyncConfig syncConfig)
+                    originallySelected[syncConfig.Entry.Uuid] = syncItemSelector.CheckedItems.Contains(item);
+            }
+            syncItemSelector.Items.Clear();
+            syncItemSelector.Items.AddRange(syncConfigs.ToArray<object>());
+            
+            for (var i = 0; i < syncItemSelector.Items.Count; i++)
+            {
+                var syncConfig = (SyncConfig) syncItemSelector.Items[i];
+                syncItemSelector.SetItemChecked(i, 
+                    !originallySelected.ContainsKey(syncConfig.Entry.Uuid) || originallySelected[syncConfig.Entry.Uuid]);
+            }
+        }
+        public IList<SyncConfig> GetSelectedSyncs()
+        {
+            return syncItemSelector.CheckedItems.Cast<SyncConfig>().ToList();
+        }
+        
     }
 }

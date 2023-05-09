@@ -142,11 +142,7 @@ namespace KeepassVaultSync
         public override string ToString()
         {
             var authMethod = string.IsNullOrEmpty(VaultUser) ? "token" : "userpass";
-            var ret =  $"SyncConfig: {VaultAddr}/{VaultMount} auth={authMethod}";
-            if (authMethod == "userpass")
-                ret += $" user={VaultUser} pass={new string('*', VaultPass.Length)}";
-            else 
-                ret += $" token={new string('*', VaultToken.Length)}";
+            var ret =  $"{VaultAddr}/{VaultMount} auth={authMethod}";
             
             return ret;
         }
