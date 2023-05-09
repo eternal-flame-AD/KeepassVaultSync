@@ -207,6 +207,7 @@
           <DependentUpon>SyncStatusForm.cs</DependentUpon>
         </Compile>
         <Compile Include="UniversalEntry.cs" />
+        <Compile Include="UserConfig.cs" />
         <Compile Include="VaultUtil.cs" />
     </ItemGroup>
     <ItemGroup>
