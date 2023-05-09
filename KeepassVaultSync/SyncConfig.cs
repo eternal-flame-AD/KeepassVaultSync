@@ -109,6 +109,12 @@ namespace KeepassVaultSync
         
         public static IList<SyncConfig> GetSyncConfigs(PwDatabase database, out IList<SyncException> exceptions)
         {
+            if (database == null || !database.IsOpen)
+            {
+                exceptions = new List<SyncException>(new []{new SyncException("Database is not opened")});
+                return null;
+            }
+            
             var root = database.RootGroup;
             foreach (var group in root.Groups)
             {

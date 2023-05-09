@@ -12,7 +12,7 @@ namespace KeepassVaultSync
     public sealed class KeepassVaultSyncExt : Plugin
     {
         private IPluginHost _host;
-        private readonly SyncStatusForm _syncStatusForm = new SyncStatusForm();
+        private SyncStatusForm _syncStatusForm;
         
         private CancellationTokenSource _cancellationTokenSource;
 
@@ -22,6 +22,7 @@ namespace KeepassVaultSync
             
             _host = host;
             
+            _syncStatusForm = new SyncStatusForm();
             _syncStatusForm.StartClicked += OnStartSync;
             _syncStatusForm.StopClicked += OnStopSync;
 
@@ -67,6 +68,7 @@ namespace KeepassVaultSync
             if (syncConfig.DeleteOrphans)
                 _syncStatusForm.LogInfo($"Discovered {vaultPathsToDelete.Count} existing entries in vault");
 
+            // Logs a cancellation message and throws if cancellation is requested.
             void CheckCancellation()
             {
                 if (cancellationToken.IsCancellationRequested)
@@ -77,6 +79,7 @@ namespace KeepassVaultSync
             }
             
 
+            // performs a BFS on the PwGroup and applies the <c>entryProcessor</c> to each entry.
             async Task ForEachEntryAsync(PwGroup rootGroup, EntryProcessor entryProcessor,
                 IList<PwEntryFilter> entryFilters)
             {
@@ -85,6 +88,7 @@ namespace KeepassVaultSync
                 var total = 0;
                 while (bfs.Count > 0)
                 {
+                    CheckCancellation();
                     var (group, path) = bfs.Dequeue();
                     foreach (var entry in group.Entries)
                     {
@@ -109,6 +113,7 @@ namespace KeepassVaultSync
                 bfs.Enqueue((rootGroup, new List<string>()));
                 while (bfs.Count > 0)
                 {
+                    CheckCancellation();
                     var (group, path) = bfs.Dequeue();
                     foreach (var entry in group.Entries)
                     {
@@ -129,6 +134,7 @@ namespace KeepassVaultSync
                 }
             }
 
+            // EntryProcessor for uploading an entry to Vault.
             async Task UploadEntry(PwEntry entry, IList<string> path)
             {
                 CheckCancellation();
@@ -219,25 +225,33 @@ namespace KeepassVaultSync
         private async void OnStartSync(object sender, EventArgs e)
         {
             _cancellationTokenSource = new CancellationTokenSource();
-            
-            var syncConfigs = SyncConfig.GetSyncConfigs(_host.Database, out var exceptions);
+
+            IList<SyncException> exceptions = new List<SyncException>();
+            IList<SyncConfig> syncConfigs = new List<SyncConfig>();
+            try
+            {
+                syncConfigs = SyncConfig.GetSyncConfigs(_host.Database, out exceptions);
+            } catch (Exception ex)
+            {
+                _syncStatusForm.LogError($"Fatal error obtaining sync configs: {ex}");
+            }
+            foreach (var exception in exceptions)
+            {
+                _syncStatusForm.LogError($"Error obtaining sync configs: {exception}");
+            }
             if (syncConfigs == null)
             {
-                _syncStatusForm.LogError("Fatal error obtaining sync configs");
+                _syncStatusForm.LogError("Fatal error obtaining sync configs, abort.");
+                _cancellationTokenSource.Dispose();
+                _cancellationTokenSource = null;
+                _syncStatusForm.FinishSyncStatus();
                 return;
             }
+            
             if  (syncConfigs.Count == 0)
             {
                 _syncStatusForm.LogWarning("No sync configs found");
-                return;
             }
-            
-            foreach (var exception in exceptions)
-            {
-                _syncStatusForm.LogError($"Fatal error obtaining sync configs: {exception}");
-            }
-
-            
             foreach (var syncConfig in syncConfigs)
             {
                 _syncStatusForm.LogInfo($"Syncing {syncConfig.VaultAddr}/{syncConfig.VaultMount}");
@@ -272,6 +286,11 @@ namespace KeepassVaultSync
         public override void Terminate()
         {
             OnStopSync(null, EventArgs.Empty);  
+            _cancellationTokenSource?.Dispose();
+            _cancellationTokenSource = null;
+            _syncStatusForm?.Dispose();
+            _syncStatusForm = null;
+            
             base.Terminate();
         }
     }
